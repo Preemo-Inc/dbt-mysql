@@ -85,7 +85,9 @@ class MySQLConnectionManager(SQLConnectionManager):
         kwargs["host"] = credentials.server
         kwargs["user"] = credentials.username
         kwargs["passwd"] = credentials.password
-        kwargs["database"] = credentials.schema
+
+        if credentials.schema:
+            kwargs["database"] = credentials.schema
 
         if credentials.port:
             kwargs["port"] = credentials.port
@@ -93,27 +95,30 @@ class MySQLConnectionManager(SQLConnectionManager):
         try:
             connection.handle = mysql.connector.connect(**kwargs)
             connection.state = 'open'
-        except mysql.connector.Error:
+        except mysql.connector.Error as e1:
 
             try:
+                # Try again without the database included
+                if 'database' in kwargs:
+                    del kwargs["database"]
+                else:
+                    raise e1
+
                 logger.debug("Failed connection when supplying the `database`. "
                              "Trying again without `database` included.")
 
-                # Try again without the database included
-                del kwargs["database"]
-
                 connection.handle = mysql.connector.connect(**kwargs)
                 connection.state = 'open'
-            except mysql.connector.Error as e:
+            except mysql.connector.Error as e2:
 
                 logger.debug("Got an error when attempting to open a mysql "
                              "connection: '{}'"
-                             .format(e))
+                             .format(e2))
 
                 connection.handle = None
                 connection.state = 'fail'
 
-                raise dbt.exceptions.FailedToConnectException(str(e))
+                raise dbt.exceptions.FailedToConnectException(str(e2))
 
         return connection
 
